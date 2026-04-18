@@ -1,0 +1,102 @@
+import streamlit as st
+from sentence-transformers import SentenceTransformer, util
+import pandas as pd
+import random
+
+# Page Config
+st.set_page_config(page_title="AI CaseMatch Pro", layout="wide")
+
+# Load Model
+@st.cache_resource
+def load_model():
+    return SentenceTransformer('all-MiniLM-L6-v2')
+
+model = load_model()
+
+# Enhanced Database
+crime_data = [
+    {"id": "FIR-001", "type": "Theft", "area": "Metro Station", "details": "Bike theft near metro station at 10 PM. Lock broken."},
+    {"id": "FIR-002", "type": "Snatching", "area": "Subway", "details": "Two-wheeler snatched by two men on Pulsar late night."},
+    {"id": "FIR-003", "type": "Robbery", "area": "Market", "details": "Armed robbery at jewelry store. Helmets and hammer used."},
+    {"id": "FIR-004", "type": "Snatching", "area": "Street", "details": "Gold chain snatched. Suspect fled on blue motorcycle."},
+    {"id": "FIR-005", "type": "Theft", "area": "Parking", "details": "Locked bicycle stolen from parking at night."}
+]
+
+df = pd.DataFrame(crime_data)
+
+# Header
+st.title("🚔 AI CaseMatch Pro")
+st.subheader("Next-Gen Crime Intelligence System")
+
+# Dashboard Metrics
+col1, col2, col3 = st.columns(3)
+col1.metric("Total Cases", len(df))
+col2.metric("Crime Types", df['type'].nunique())
+col3.metric("High Risk Areas", df['area'].nunique())
+
+st.markdown("---")
+
+# Sidebar Filters
+st.sidebar.title("🔍 Filters")
+selected_type = st.sidebar.selectbox("Crime Type", ["All"] + list(df["type"].unique()))
+
+if selected_type != "All":
+    df = df[df["type"] == selected_type]
+
+# Input Section
+st.markdown("### 📝 Enter FIR Details")
+input_text = st.text_area("Describe the incident:", placeholder="e.g., bike stolen near metro at night")
+
+# AI Button
+if st.button("🚀 Analyze Case"):
+    if input_text:
+        with st.spinner("Running AI analysis..."):
+            input_embedding = model.encode(input_text, convert_to_tensor=True)
+            db_embeddings = model.encode(df['details'].tolist(), convert_to_tensor=True)
+
+            cosine_scores = util.cos_sim(input_embedding, db_embeddings)[0]
+            df['similarity_score'] = cosine_scores.tolist()
+
+            results = df.sort_values(by='similarity_score', ascending=False).head(3)
+
+        st.success("Analysis Complete!")
+
+        # 🔗 Similar Cases
+        st.markdown("## 🔗 Top Matching Cases")
+        for _, row in results.iterrows():
+            score = round(row['similarity_score'] * 100, 2)
+
+            color = "🟢" if score > 75 else "🟡" if score > 50 else "🔴"
+            st.markdown(f"{color} **{row['id']} ({row['type']}) - {score}% match**")
+            st.info(f"{row['details']} | 📍 {row['area']}")
+
+        # 🧠 AI Insight Section
+        st.markdown("## 🧠 AI Insights")
+
+        # Pattern Detection
+        common_area = results['area'].mode()[0]
+        st.write(f"📍 **Hotspot Detected:** Most similar crimes occurred near **{common_area}**")
+
+        # Suspect Hint (Simulated AI)
+        suspects = [
+            "Repeat offender using two-wheeler escape",
+            "Night-time opportunistic thief",
+            "Organized group targeting valuables",
+            "Local area criminal familiar with location"
+        ]
+        st.write(f"👤 **Possible Pattern:** {random.choice(suspects)}")
+
+        # Case Summary
+        st.markdown("## 📝 AI Case Summary")
+        st.success(f"This case is similar to previous incidents involving {results.iloc[0]['type']} in {common_area}. Likely pattern suggests {random.choice(suspects).lower()}.")
+
+        # 📊 Simple Analytics
+        st.markdown("## 📊 Crime Distribution")
+        st.bar_chart(df['type'].value_counts())
+
+    else:
+        st.warning("Please enter FIR details.")
+
+# Footer
+st.markdown("---")
+st.caption("🚨 AI-powered policing prototype | Built for innovation & smart governance")
